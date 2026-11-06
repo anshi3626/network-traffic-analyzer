@@ -1,0 +1,12 @@
+pkts/
+venv/
+__pycache__/
+*.pyc
+.vscode/
+.env
+data/uploaded.csv
+data/whitelist.txt
+Network_Data.csv
+alerts_report.csv
+*.pcap
+*.pcapng

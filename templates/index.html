@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Packet Sentinel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="shell">
+
+  <aside class="rail">
+    <div class="brand">Packet Sentinel</div>
+    <nav class="nav">
+      <button class="nav-btn active" data-view="overview">Overview</button>
+      <button class="nav-btn" data-view="packets">Packets</button>
+      <button class="nav-btn" data-view="alerts">Alerts <span class="badge" id="alert-badge" hidden>0</span></button>
+    </nav>
+    <div class="rail-foot">
+      <p class="muted small">Analysing</p>
+      <p class="file" id="file-name">-</p>
+      <label class="btn block">
+        Upload CSV
+        <input type="file" id="file-input" accept=".csv" hidden>
+      </label>
+      <button class="btn ghost block" id="reset-btn">Use default data</button>
+      <button class="btn ghost block" id="refresh-btn">Refresh</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="notice" id="notice" hidden></div>
+
+    <!-- OVERVIEW -->
+    <section class="view" id="view-overview">
+      <header class="verdict">
+        <h2 id="verdict">Loading capture...</h2>
+        <p class="muted" id="verdict-sub"></p>
+        <div class="riskbar" id="riskbar" aria-hidden="true"></div>
+        <ul class="legend" id="risk-legend"></ul>
+      </header>
+
+      <dl class="facts" id="facts"></dl>
+
+      <section class="panel">
+        <h3>Network map</h3>
+        <p class="muted small">Each dot is an IP address. Bigger dot = more packets. Red = threat, amber = watch, blue ring = local device. Click a dot to see its packets.</p>
+        <div class="map" id="map"></div>
+      </section>
+
+      <div class="grid">
+        <section class="panel">
+          <h3>Traffic over the capture (flagged packets stack in amber and red)</h3>
+          <div class="chart tall"><canvas id="c-timeline"></canvas></div>
+        </section>
+        <section class="panel">
+          <h3>Protocols</h3>
+          <div class="chart tall"><canvas id="c-proto"></canvas></div>
+        </section>
+        <section class="panel">
+          <h3>Top sending IPs</h3>
+          <div class="chart"><canvas id="c-src"></canvas></div>
+        </section>
+        <section class="panel">
+          <h3>Most used destination ports</h3>
+          <div class="chart"><canvas id="c-ports"></canvas></div>
+        </section>
+        <section class="panel wide">
+          <h3>Traffic with each country (data volume)</h3>
+          <div class="toolbar"><button class="btn ghost tiny" id="scale-btn">Switch to linear scale</button><span class="muted small" id="country-note"></span></div>
+          <div class="chart" id="country-box"><canvas id="c-country"></canvas></div>
+        </section>
+        <section class="panel">
+          <h3>Riskiest devices</h3>
+          <p class="muted small">Score out of 100, added up from everything flagged for that IP. Click an IP to see its packets.</p>
+          <div id="risk-rank"></div>
+        </section>
+        <section class="panel">
+          <h3>Most requested domains</h3>
+          <div class="chart" id="dns-box"><canvas id="c-dns"></canvas></div>
+          <p class="muted small" id="dns-note"></p>
+        </section>
+      </div>
+
+      <section class="panel">
+        <h3>Top findings</h3>
+        <div id="top-findings"></div>
+      </section>
+    </section>
+
+    <!-- PACKETS -->
+    <section class="view" id="view-packets" hidden>
+      <header class="page-head">
+        <h2>Packets</h2>
+        <div class="actions">
+          <button class="btn" id="export-packets">Download filtered rows</button>
+        </div>
+      </header>
+      <div class="ipcard" id="ip-card" hidden></div>
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search IP, protocol, port or info">
+        <select id="f-proto"><option value="">All protocols</option></select>
+        <select id="f-risk">
+          <option value="">All risk levels</option>
+          <option value="threat">Threat</option>
+          <option value="watch">Watch</option>
+          <option value="ok">Normal</option>
+        </select>
+        <span class="muted small" id="count"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="table">
+          <thead>
+            <tr>
+              <th data-sort="id">No.</th>
+              <th data-sort="time">Time</th>
+              <th data-sort="src">Source</th>
+              <th data-sort="dst">Destination</th>
+              <th data-sort="proto">Protocol</th>
+              <th data-sort="length" class="num">Length</th>
+              <th data-sort="dport">Ports</th>
+              <th data-sort="risk">Risk</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button class="btn ghost" id="prev">Previous</button>
+        <span class="muted small" id="page-info"></span>
+        <button class="btn ghost" id="next">Next</button>
+      </div>
+    </section>
+
+    <!-- ALERTS -->
+    <section class="view" id="view-alerts" hidden>
+      <header class="page-head">
+        <h2>Alerts</h2>
+        <div class="actions">
+          <a class="btn" href="/export/alerts.csv">Download alerts CSV</a>
+          <button class="btn ghost" id="print-btn">Print report</button>
+        </div>
+      </header>
+      <div id="alert-list"></div>
+      <section class="panel" id="ignored-box" hidden>
+        <h3>Ignored IPs</h3>
+        <p class="muted small">These IPs never raise alerts. Remove one to start checking it again.</p>
+        <div id="ignored"></div>
+      </section>
+    </section>
+  </main>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
